@@ -73,11 +73,6 @@ function setClientDefaultListeners(client) {
     console.log('Client info')
     console.log(client.info)
   });
-
-  // client.on('authenticated', () => {
-  //   availableClient.authenticated = true
-  //   clients[ availableClient.id ] = availableClient.client
-  // });
 }
 
 app.get('/create_instance', async (req, res) => {
@@ -86,8 +81,8 @@ app.get('/create_instance', async (req, res) => {
     return
   }
 
-  availableClient.client        = createClient()
   availableClient.authenticated = false
+  availableClient.client        = createClient()
   availableClient.id            = availableClient.client.options.authStrategy.clientId
 
   res.send({ instance_id: availableClient.id })
