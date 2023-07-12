@@ -11,7 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 
 const axios = require('axios')
 
-mongoose.connect('mongodb://localhost/wweb').then(()=>{})
+mongoose.connect('mongodb://localhost/wweb').then(() => { })
 
 var clients = {}
 var availableClient = {
@@ -41,23 +41,23 @@ function createClient(clientId = null) {
 }
 
 async function findClient(instance_id) {
-  let exists = await store.sessionExists({session: `RemoteAuth-${instance_id}`})
-  if( !exists && !clients.hasOwnProperty(instance_id) ) return null
-    
+  let exists = await store.sessionExists({ session: `RemoteAuth-${instance_id}` })
+  if (!exists && !clients.hasOwnProperty(instance_id)) return null
+
   let client = null
 
-  if ( clients.hasOwnProperty(instance_id) ){
-    console.log( 'Client found in memory' )
-    return clients[ instance_id ]
+  if (clients.hasOwnProperty(instance_id)) {
+    console.log('Client found in memory')
+    return clients[instance_id]
   };
 
-  console.log( 'Client found in DB' )
+  console.log('Client found in DB')
   client = createClient(instance_id)
   clients[instance_id] = client
   return client;
 }
 
-function setClientDefaultListeners(client){
+function setClientDefaultListeners(client) {
   console.log('Setting client default listeners')
 
   client.on('qr', qrcontent => {
@@ -66,10 +66,10 @@ function setClientDefaultListeners(client){
 
   client.on('ready', () => {
     console.log('Client ready!')
-    if( client.options.authStrategy.clientId == availableClient.id ){
+    if (client.options.authStrategy.clientId == availableClient.id) {
       availableClient.authenticated = true
     }
-    clients[ client.options.authStrategy.clientId ] = client
+    clients[client.options.authStrategy.clientId] = client
     console.log('Client info')
     console.log(client.info)
   });
@@ -86,70 +86,64 @@ app.get('/create_instance', async (req, res) => {
     return
   }
 
-  availableClient.client = createClient()
-  availableClient.id     = availableClient.client.options.authStrategy.clientId
+  availableClient.client        = createClient()
+  availableClient.authenticated = false
+  availableClient.id            = availableClient.client.options.authStrategy.clientId
 
   res.send({ instance_id: availableClient.id })
 })
 
 app.get('/set_webhook', async (req, res) => {
   if (availableClient.id && !availableClient.authenticated) {
-    if (!req.query.instance_id) { res.status(422).send({message: 'instance_id is required'}); return }
-    if (!req.query.webhook_url) { res.status(422).send({message: 'Webhook url is required'}); return }
-    if (req.query.instance_id != availableClient.id) {res.status(422).send({message: 'Instance ID invalidated'}); return }
+    if (!req.query.instance_id) { res.status(422).send({ message: 'instance_id is required' }); return }
+    if (!req.query.webhook_url) { res.status(422).send({ message: 'Webhook url is required' }); return }
+    if (req.query.instance_id != availableClient.id) { res.status(422).send({ message: 'Instance ID invalidated' }); return }
 
     availableClient.webhook_url = req.query.webhook_url
 
-    // availableClient.client.on('authenticated', () => {
-    //   console.log( availableClient.client.info )
-    //   axios.get(req.query.webhook_url, {
-    //     query: { event: 'authenticated', phone: info.wid.user}
-    //   })
-    // })
-
-    availableClient.client.on('ready', () => {
-      console.log( availableClient.client.info )
+    availableClient.client.once('ready', () => {
+      console.log(availableClient.client.info)
       axios.get(req.query.webhook_url, {
-        params: { event: 'ready', instance_id: availableClient.id, phone: availableClient.client.info.wid.user}
+        params: { event: 'ready', instance_id: availableClient.id, phone: availableClient.client.info.wid.user }
       })
-      .then(res  => console.log('Webhook set successfully'))
-      .catch(err => {console.log(err); console.log(err.response)})
+        .then(res => console.log('Webhook set successfully'))
+        .catch(err => { console.log(err); console.log(err.response) })
     })
 
-    res.send({ 'message': 'Webhook set successfully', 'status':'success' })
+    res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
     return
   }
   res.send('Instance ID invalidated')
 })
 
 app.get('/get_qrcode', (req, res) => {
-  if( !req.query.instance_id ){
+  if (!req.query.instance_id) {
     res.status(422).send('instance_id field is required')
     return;
   }
 
-  if(availableClient.authenticated || availableClient.id != req.query.instance_id){
+  if (availableClient.authenticated || availableClient.id != req.query.instance_id) {
     res.send('instance ID invalidated')
     return;
   }
 
-  res.send({ base64: availableClient.qr, status:'success' })
+  res.send({ base64: availableClient.qr, status: 'success' })
 })
 
 app.get('/find', async (req, res) => {
-  let data = await store.sessionExists({session: `RemoteAuth-${req.query.instance_id}`});
+  let data = await store.sessionExists({ session: `RemoteAuth-${req.query.instance_id}` });
 
-  if( !data && !clients.hasOwnProperty( req.query.instance_id )){
+  if (!data && !clients.hasOwnProperty(req.query.instance_id)) {
     res.send('Session does not exist ')
     return
   }
 
-  if( clients.hasOwnProperty( req.query.instance_id ) ){
+  if (clients.hasOwnProperty(req.query.instance_id)) {
     res.send({
       status: 'success',
       message: 'Client found in memory',
-      info: clients[ req.query.instance_id ].info,
-      state: clients[ req.query.instance_id ].status
+      info: clients[req.query.instance_id].info,
+      state: clients[req.query.instance_id].status
     })
     return
   }
@@ -163,59 +157,59 @@ app.get('/find', async (req, res) => {
 })
 
 app.get('/send', async (req, res) => {
-  if( !req.query.instance_id ){
-    res.status(422).send({message: 'instance_id field is required'});
+  if (!req.query.instance_id) {
+    res.status(422).send({ message: 'instance_id field is required' });
     return
   }
 
-  if( !req.query.phone ){
-    res.status('422').send({message: 'phone field is required'});
+  if (!req.query.phone) {
+    res.status('422').send({ message: 'phone field is required' });
     return
   }
 
-  if( !req.query.body ){
-    res.status('422').send({message: 'body field is required'});
+  if (!req.query.body) {
+    res.status('422').send({ message: 'body field is required' });
     return
   }
 
   let client = await findClient(req.query.instance_id)
   let media = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url) : null
   let options = media
-                ? {media, caption: req.query.body}
-                : {}
-  
-  if( !client ){ res.status(404).send({status: 'error', message: 'Instance id not found or invalidated'}); return; }
+    ? { media, caption: req.query.body }
+    : {}
 
-  if( client.info ){
+  if (!client) { res.status(404).send({ status: 'error', message: 'Instance id not found or invalidated' }); return; }
+
+  if (client.info) {
     console.log('Sending message ready')
     client.sendMessage(`${req.query.phone}@c.us`, req.query.body, options)
   }
-  else{
+  else {
     console.log('Sending message deferred')
     client.once('ready', () => {
       client.sendMessage(`${req.query.phone}@c.us`, req.query.body, options)
     })
   }
 
-  res.send({message: 'Message sent successfully'})
+  res.send({ message: 'Message sent successfully' })
   return
-  
+
 })
 
-app.get('/logout', async (req,res)=>{
-  let client = await findClient( req.query.instance_id )
+app.get('/logout', async (req, res) => {
+  let client = await findClient(req.query.instance_id)
 
-  if( !client ){
-    res.send({status: 'success', message: 'Session already closed'})
+  if (!client) {
+    res.send({ status: 'success', message: 'Session already closed' })
     return
   }
 
-  if( client.info ){
+  if (client.info) {
     await client.logout()
-    await store.delete({session: req.query.instance_id});
+    await store.delete({ session: req.query.instance_id });
     delete clients[req.query.instance_id];
 
-    res.send({status: 'success', message: 'Logout successfully'})
+    res.send({ status: 'success', message: 'Logout successfully' })
     return
   }
 
@@ -223,7 +217,7 @@ app.get('/logout', async (req,res)=>{
     await client.logout()
     delete clients[req.query.instance_id];
   })
-  res.send({status: 'success', message: 'Logout in progress'})
+  res.send({ status: 'success', message: 'Logout in progress' })
 })
 
 app.listen(3000, () => console.log('Hello, newbie!')) 
