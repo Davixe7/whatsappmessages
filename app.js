@@ -112,6 +112,8 @@ app.get('/set_webhook', async (req, res) => {
       axios.get(req.query.webhook_url, {
         params: { event: 'ready', instance_id: availableClient.id, phone: availableClient.client.info.wid.user}
       })
+      .then(res  => console.log('Webhook set successfully'))
+      .catch(err => {console.log(err); console.log(err.response)})
     })
 
     res.send({ 'message': 'Webhook set successfully', 'status':'success' })
@@ -210,7 +212,9 @@ app.get('/logout', async (req,res)=>{
 
   if( client.info ){
     await client.logout()
+    await store.delete({session: req.query.instance_id});
     delete clients[req.query.instance_id];
+
     res.send({status: 'success', message: 'Logout successfully'})
     return
   }
