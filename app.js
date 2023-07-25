@@ -157,12 +157,12 @@ app.get('/send', async (req, res) => {
     return
   }
 
-  if (!req.query.phone) {
+  if (!req.query.number) {
     res.status('422').send({ message: 'phone field is required' });
     return
   }
 
-  if (!req.query.body) {
+  if (!req.query.message) {
     res.status('422').send({ message: 'body field is required' });
     return
   }
@@ -170,19 +170,19 @@ app.get('/send', async (req, res) => {
   let client = await findClient(req.query.instance_id)
   let media = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url) : null
   let options = media
-    ? { media, caption: req.query.body }
+    ? { media, caption: req.query.message }
     : {}
 
   if (!client) { res.status(404).send({ status: 'error', message: 'Instance id not found or invalidated' }); return; }
 
   if (client.info) {
     console.log('Sending message ready')
-    client.sendMessage(`${req.query.phone}@c.us`, req.query.body, options)
+    client.sendMessage(`${req.query.number}@c.us`, req.query.message, options)
   }
   else {
     console.log('Sending message deferred')
     client.once('ready', () => {
-      client.sendMessage(`${req.query.phone}@c.us`, req.query.body, options)
+      client.sendMessage(`${req.query.number}@c.us`, req.query.message, options)
     })
   }
 
