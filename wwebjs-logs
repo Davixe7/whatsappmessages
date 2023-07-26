@@ -1,0 +1,4 @@
+MaxListenersExceededWarning:
+Possible EventEmitter memory leak detected.
+11 ready listeners added to [Client].
+Use emitter.setMaxListeners() to increase limit
