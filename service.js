@@ -53,6 +53,18 @@ class ClientManager {
   restoreClient(clientId) {
     let authStrategy = new RemoteAuth({ store, clientId, backupSyncIntervalMs: 300000 })
     let client = new Client({ authStrategy })
+    client.on('ready', ()=>{
+        console.log('Client restored succesfully')
+    })
+    client.on('authentication_failure', () => {
+        console.log('Authentication failed')
+    })
+    client.on('qr', ()=>{
+        console.log('qr received')
+        client.getState().then(res=>console.log(res))
+    })
+    console.log( client.status )
+    console.log( client.WAState )
     client.initialize()
     this.clients[clientId] = client;
     return client;

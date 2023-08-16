@@ -92,7 +92,7 @@ router.get('/send', async (req, res) => {
 
   let media   = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url) : null
   let options = media ? { media, caption: req.query.message } : {}
-  let number  = req.query.group_id ? `${req.query.number}@g.us`: `${req.query.number}@c.us`
+  let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
 
   if (client.info) {
     console.log('Sending message ready')
