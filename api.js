@@ -27,6 +27,7 @@ router.get('/set_webhook', async (req, res) => {
 
     clientManager.availableClient.client.once('ready', () => {
       console.log(clientManager.availableClient.client.info)
+      console.log('Connecting with phenlinea.com')
       axios.get(req.query.webhook_url, {
         params: { event: 'ready', instance_id: clientManager.availableClient.id, phone: clientManager.availableClient.client.info.wid.user }
       })
@@ -58,7 +59,7 @@ router.get('/find', async (req, res) => {
   let client = await clientManager.findClient(req.query.instance_id);
 
   if (!client) {
-    res.send('Session does not exist.')
+    res.send({message: 'Session does not exist.'})
     return
   }
 
@@ -90,7 +91,7 @@ router.get('/send', async (req, res) => {
   let client  = await clientManager.findClient(req.query.instance_id)
   if (!client) { res.status(404).send({ status: 'error', message: 'Instance id not found or invalidated' }); return; }
 
-  let media   = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url) : null
+  let media   = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url, {"unsafeMime": true}) : null
   let options = media ? { media, caption: req.query.message } : {}
   let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
 

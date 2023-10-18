@@ -21,7 +21,7 @@ class ClientManager {
     this.availableClient.client        = client
     this.availableClient.id            = clientId
 
-    console.log('Client created ' + client.id);
+    console.log('Client created ' + this.availableClient.id);
 
     this.setClientDefaultListeners(client);
 
