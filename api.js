@@ -96,7 +96,7 @@ router.get('/send', async (req, res) => {
   let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
 
   if (client.info) {
-    console.log('Sending message ready')
+    console.log('Sending message ready ' + number)
     client.sendMessage(number, req.query.message, options)
   }
   else {
