@@ -23,16 +23,19 @@ router.get('/set_webhook', async (req, res) => {
     if (!req.query.webhook_url) { res.status(422).send({ message: 'Webhook url is required' }); return }
     if (req.query.instance_id != clientManager.availableClient.id) { res.status(422).send({ message: 'Instance ID invalidated' }); return }
 
+    if( clientManager.availableClient.webhook_url == req.query.webhook_url ){
+      res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
+    }
+
     clientManager.availableClient.webhook_url = req.query.webhook_url
 
-    clientManager.availableClient.client.once('ready', () => {
-      console.log(clientManager.availableClient.client.info)
-      console.log('Connecting with phenlinea.com')
-      axios.get(req.query.webhook_url, {
-        params: { event: 'ready', instance_id: clientManager.availableClient.id, phone: clientManager.availableClient.client.info.wid.user }
-      })
-        .then(res => console.log('Webhook set successfully'))
-        .catch(err => { console.log(err); console.log(err.response) })
+    clientManager.availableClient.client.once('ready', async () => {
+      let params = {
+        event: 'ready',
+        instance_id: clientManager.availableClient.id,
+        phone: clientManager.availableClient.client.info.wid.user
+      }
+      await axios.get(req.query.webhook_url, {params})
     })
 
     res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
