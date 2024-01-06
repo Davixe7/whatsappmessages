@@ -35,6 +35,7 @@ class ClientManager {
 
     client.on('qr', (qrcontent) => {
       qrcode.toDataURL(qrcontent, (err, url) => {
+        console.log(this.availableClient.id + ' qr updated')
         this.availableClient.qr = url;
       });
     });
@@ -87,10 +88,12 @@ class ClientManager {
     await client.logout()
     await store.delete({ session: instance_id });
     delete this.clients[instance_id];
+    console.log(instance_id + 'Session closed ')
   }
 
   async logout(instance_id){
     let client = await this.findClient(instance_id)
+    console.log( instance_id + ' requested logout' );
     if( !client ){ return 'session already closed.'; }
 
     if( client.info ){

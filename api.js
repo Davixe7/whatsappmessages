@@ -25,6 +25,7 @@ router.get('/set_webhook', async (req, res) => {
 
     if( clientManager.availableClient.webhook_url == req.query.webhook_url ){
       res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
+      return
     }
 
     clientManager.availableClient.webhook_url = req.query.webhook_url
@@ -99,11 +100,11 @@ router.get('/send', async (req, res) => {
   let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
 
   if (client.info) {
-    console.log('Sending message ready ' + number)
+    console.log(req.query.instance_id + ' Sending message ready ' + number)
     client.sendMessage(number, req.query.message, options)
   }
   else {
-    console.log('Sending message deferred')
+    console.log(req.query.instance_id + ' Sending message deferred ' + number)
     client.once('ready', () => client.sendMessage(number, req.query.message, options))
   }
 
