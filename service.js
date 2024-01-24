@@ -1,16 +1,12 @@
-const mongoose               = require('mongoose')
-const { MongoStore }         = require('wwebjs-mongo')
-const store                  = new MongoStore(mongoose)
 const { Client, LocalAuth }  = require('whatsapp-web.js')
 const qrcode                 = require('qrcode')
 const { v4: uuidv4 }         = require('uuid')
-const fs = require("fs")
+const fs                     = require("fs")
 
 class ClientManager {
   constructor() {
     this.clients = {};
     this.availableClient = {}
-    mongoose.connect('mongodb://localhost/wweb')
   }
 
   createClient() {
@@ -85,7 +81,6 @@ class ClientManager {
   }
 
   async findClient(instance_id) {
-    // let exists = await store.sessionExists({ session: `RemoteAuth-${instance_id}` });
     let exists = fs.existsSync(`./.wwebjs_auth/session-${instance_id}`)
     if (!exists && !this.clients.hasOwnProperty(instance_id)) return null;
 
@@ -115,6 +110,20 @@ class ClientManager {
 
     client.once('ready', async () => this.deleteClient(client, instance_id))
     return 'session will close soon.'
+  }
+
+  async isClientOnline(instance_id, wid) {
+    let client = await this.findClient(instance_id);
+    try {
+      const contactId = `${wid}@c.us`;
+      const contact   = await client.getContactById(contactId);
+      if (contact.isMe && contact.isUser) {
+        return true;
+      }
+    } catch (error) {
+      console.error("Error:", error);
+      return true;
+    }
   }
 }
 
