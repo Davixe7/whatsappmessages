@@ -30,15 +30,6 @@ router.get('/set_webhook', async (req, res) => {
 
     clientManager.availableClient.webhook_url = req.query.webhook_url
 
-    clientManager.availableClient.client.once('ready', async () => {
-      let params = {
-        event: 'ready',
-        instance_id: clientManager.availableClient.id,
-        phone: clientManager.availableClient.client.info.wid.user
-      }
-      await axios.get(req.query.webhook_url, {params})
-    })
-
     res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
     return
   }
@@ -90,6 +81,11 @@ router.get('/send', async (req, res) => {
   if (!req.query.message) {
     res.status(422).send({ message: 'message field is required' });
     return
+  }
+
+  if(req.query.number == 'null' || req.query.number == '57'){
+    res.status(422).send({message: 'invalid phone number ' + req.query.number})
+    return;
   }
 
   let client  = await clientManager.findClient(req.query.instance_id)
