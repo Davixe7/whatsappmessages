@@ -4,9 +4,22 @@ const { v4: uuidv4 }         = require('uuid')
 const fs                     = require("fs")
 
 class ClientManager {
-  constructor() {
+  constructor(io) {
+    this.io      = io;
     this.clients = {};
-    this.availableClient = {}
+    this.availableClient = {
+      client: {},
+      authenticated: false,
+      qr: {
+        createdAt: new Date(),
+        url: null
+      },
+      isExpired: function(){
+        let now = new Date();
+        let difference = now - this.qr.createdAt;
+        return (difference / (1000 * 60)) > 1.5;
+      }
+    }
   }
 
   createClient() {
@@ -32,31 +45,47 @@ class ClientManager {
 
     client.on('qr', (qrcontent) => {
       qrcode.toDataURL(qrcontent, (err, url) => {
-        console.log(this.availableClient.id + ' qr updated')
-        this.availableClient.qr = url;
+        this.availableClient.qr.createdAt = new Date()
+        this.availableClient.qr.url       = url;
+        this.io.emit('qrcode', JSON.stringify({
+          qrcode:url,
+          instance_id: this.availableClient.id
+        }))
       });
+    });
+
+    client.on('authenticated', ()=>{
+      console.log('Client authenticated');
+    })
+
+    client.on('auth_failure', () => {
+      console.log('Client is auth_failure!');
     });
 
     client.on('ready', () => {
       console.log('Client ready!');
-      this.clients[client.options.authStrategy.clientId] = client;
-      console.log('Client info');
-      console.log(client.info);
+      // this.clients[client.options.authStrategy.clientId] = client;
+      // console.log('Client info', client.info);
 
-      if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
-      this.availableClient.authenticated = true;
+      // if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
+      // this.availableClient.authenticated = true;
 
-	if( this.availableClient.webhook_url ){
-		axios.get(this.availableClient.webhook_url, {
-		  params: {
-		    event: 'ready',
-		    instance_id: this.availableClient.id,
-		    phone: this.availableClient.client.info.wid.user
-		  }
-		})
-		.then(res => console.log('Webhook set successfully'))
-		.catch(err => { console.log(err); console.log(err.response) })
-	}
+      // this.io.emit('ready', JSON.stringify({
+      //   instance_id: this.availableClient.id,
+      //   phone: this.availableClient.client.info.wid.user
+      // }))
+
+      // if( !this.availableClient.webhook_url ){ return; }
+      
+      // axios.get(this.availableClient.webhook_url, {
+      //   params: {
+      //     event: 'ready',
+      //     instance_id: this.availableClient.id,
+      //     phone: this.availableClient.client.info.wid.user
+      //   }
+      // })
+      // .then(res => console.log('Webhook set successfully'))
+      // .catch(err => { console.log(err); console.log(err.response) })
     });
   }
 
