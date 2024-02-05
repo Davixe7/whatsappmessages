@@ -64,46 +64,48 @@ class ClientManager {
 
     client.on('ready', () => {
       console.log('Client ready!');
-      // this.clients[client.options.authStrategy.clientId] = client;
-      // console.log('Client info', client.info);
+      this.clients[client.options.authStrategy.clientId] = client;
+      console.log('Client info', client.info);
 
-      // if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
-      // this.availableClient.authenticated = true;
+      if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
+      this.availableClient.authenticated = true;
 
-      // this.io.emit('ready', JSON.stringify({
-      //   instance_id: this.availableClient.id,
-      //   phone: this.availableClient.client.info.wid.user
-      // }))
+      this.io.emit('ready', JSON.stringify({
+        instance_id: this.availableClient.id,
+        phone: this.availableClient.client.info.wid.user
+      }))
 
-      // if( !this.availableClient.webhook_url ){ return; }
+      if( !this.availableClient.webhook_url ){ return; }
       
-      // axios.get(this.availableClient.webhook_url, {
-      //   params: {
-      //     event: 'ready',
-      //     instance_id: this.availableClient.id,
-      //     phone: this.availableClient.client.info.wid.user
-      //   }
-      // })
-      // .then(res => console.log('Webhook set successfully'))
-      // .catch(err => { console.log(err); console.log(err.response) })
+      axios.get(this.availableClient.webhook_url, {
+        params: {
+          event: 'ready',
+          instance_id: this.availableClient.id,
+          phone: this.availableClient.client.info.wid.user
+        }
+      })
+      .then(res => console.log('Webhook set successfully'))
+      .catch(err => { console.log(err); console.log(err.response) })
     });
   }
 
   restoreClient(clientId) {
     let authStrategy = new LocalAuth({clientId})
     let client = new Client({ authStrategy })
-    client.on('ready', ()=>{
-        console.log('Client restored succesfully')
+
+    client.once('ready', ()=>{
+      console.log('Client restored succesfully')
+      console.log( client.status )
+      console.log( client.WAState )
     })
-    client.on('authentication_failure', () => {
-        console.log('Authentication failed')
+    client.once('authentication_failure', () => {
+      console.log('Authentication failed')
     })
-    client.on('qr', ()=>{
-        console.log(clientId, ' qr received')
-        client.getState().then(res=>console.log(res))
+    client.once('qr', ()=>{
+      console.log(clientId, ' qr received')
+      client.getState().then(res=>console.log(res))
     })
-    console.log( client.status )
-    console.log( client.WAState )
+
     client.initialize()
     this.clients[clientId] = client;
     return client;
@@ -122,14 +124,13 @@ class ClientManager {
 
   async deleteClient(client, instance_id){
     await client.logout()
-    await store.delete({ session: instance_id });
     delete this.clients[instance_id];
     console.log(instance_id + 'Session closed ')
   }
 
   async logout(instance_id){
     let client = await this.findClient(instance_id)
-    console.log( instance_id + ' requested logout' );
+
     if( !client ){ return 'session already closed.'; }
 
     if( client.info ){
@@ -143,15 +144,16 @@ class ClientManager {
 
   async isClientOnline(instance_id, wid) {
     let client = await this.findClient(instance_id);
+
+    if(!client || !client.info){ return false; }
+
     try {
-      const contactId = `${wid}@c.us`;
-      const contact   = await client.getContactById(contactId);
-      if (contact.isMe && contact.isUser) {
-        return true;
-      }
+      const contact  = await client.getContactById(`${wid}@c.us`);
+      const isOnline = (contact.isMe && contact.isUser)
+      return isOnline;
     } catch (error) {
       console.error("Error:", error);
-      return true;
+      return false;
     }
   }
 }

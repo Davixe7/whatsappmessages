@@ -119,5 +119,20 @@ module.exports = (app, io)=>{
     res.send({ status: 'success', message })
   })
 
+  router.get('/validate', async(req, res) => {
+    if( !req.query.instance_id ){
+      res.status(422).send('instance_id field is required')
+      return
+    }
+
+    if( !req.query.phone ){
+      res.status(422).send('phone field is required')
+      return
+    }
+
+    let isOnline = await clientManager.isClientOnline(req.query.instance_id, req.query.phone)
+    res.send({message: isOnline ? 'Client is active and running' : 'Client is not responding', data: isOnline ? 1 : 0})
+  })
+
   app.use('/', router)
 };
