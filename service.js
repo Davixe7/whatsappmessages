@@ -1,111 +1,82 @@
 const { Client, LocalAuth }  = require('whatsapp-web.js')
-const qrcode                 = require('qrcode')
-const { v4: uuidv4 }         = require('uuid')
+const Cliente                = require('./Cliente')
 const fs                     = require("fs")
 
 class ClientManager {
   constructor(io) {
-    this.io      = io;
-    this.clients = {};
-    this.availableClient = {
-      client: {},
-      authenticated: false,
-      qr: {
-        createdAt: new Date(),
-        url: null
-      },
-      isExpired: function(){
-        let now = new Date();
-        let difference = now - this.qr.createdAt;
-        return (difference / (1000 * 60)) > 1.5;
-      }
-    }
+    this.io              = io;
+    this.clients         = {};
+    this.pairingClients  = {};
+    this.availableClient = this.createInstance()
   }
 
-  createClient() {
-    let clientId     = uuidv4().split('-').pop()
-    let authStrategy = new LocalAuth({clientId})
-    let client = new Client({authStrategy});
+  createInstance(clientId, phone) {
+    let newClient = new Cliente(clientId, phone)
+    newClient.setDefaultListeners()
+    newClient.initialize()
+    this.setClientDefaultListeners(newClient)
+    return newClient
+  }
 
-    this.availableClient.authenticated = false
-    this.availableClient.client        = client
-    this.availableClient.id            = clientId
+  getPairingCode(phone){
+    if(this.pairingClients.hasOwnProperty(phone)){
+      return this.pairingClients[phone]
+    }
 
-    console.log('Client created ' + this.availableClient.id);
+    let newClient = this.createInstance(null, phone)
+    this.pairingClients[phone] = newClient;
+    return newClient
+  }
 
-    this.setClientDefaultListeners(client);
-
-    client.initialize();
-    console.log('Initializing client');
-    return client;
+  getAvailableInstance(){
+    if( !this.availableClient.authenticated && !this.availableClient.isExpired() ){
+      return this.availableClient
+    }
+    this.availableClient = this.createInstance()
+    return this.availableClient
   }
 
   setClientDefaultListeners(client) {
-    console.log('Setting client default listeners');
 
-    client.on('qr', (qrcontent) => {
-      qrcode.toDataURL(qrcontent, (err, url) => {
-        this.availableClient.qr.createdAt = new Date()
-        this.availableClient.qr.url       = url;
-        this.io.emit('qrcode', JSON.stringify({
-          qrcode:url,
-          instance_id: this.availableClient.id
-        }))
-      });
-    });
-
-    client.on('authenticated', ()=>{
-      console.log('Client authenticated');
-    })
-
-    client.on('auth_failure', () => {
-      console.log('Client is auth_failure!');
-    });
-
-    client.on('ready', () => {
-      console.log('Client ready!');
-      this.clients[client.options.authStrategy.clientId] = client;
-      console.log('Client info', client.info);
-
-      if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
-      this.availableClient.authenticated = true;
-
-      this.io.emit('ready', JSON.stringify({
-        instance_id: this.availableClient.id,
-        phone: this.availableClient.client.info.wid.user
+    client.on('qr', async (qrurl) => {
+      if(client.clientId != this.availableClient.clientId){return;}
+      this.io.emit('qrcode', JSON.stringify({
+        qrcode: qrurl,
+        instance_id: client.clientId
       }))
+    });
 
-      if( !this.availableClient.webhook_url ){ return; }
-      
-      axios.get(this.availableClient.webhook_url, {
-        params: {
-          event: 'ready',
-          instance_id: this.availableClient.id,
-          phone: this.availableClient.client.info.wid.user
-        }
-      })
-      .then(res => console.log('Webhook set successfully'))
-      .catch(err => { console.log(err); console.log(err.response) })
+    client.on('pairingCode', async (pairingCode) => {
+      this.io.emit('pairingCode', JSON.stringify({
+        pairingCode,
+        instance_id: client.clientId
+      }))
+    });
+
+    client.on('ready', async () => {
+      let params = {
+        event: 'ready',
+        instance_id: client.clientId,
+        phone: client.instance.info.wid.user,
+      }
+
+      this.clients[client.clientId] = client;
+      this.io.emit('ready', JSON.stringify(params))
+
+      // SetWebHook if specified
+      try {
+        if( !client.webhook_url ){ return; }
+        await axios.get(client.webhook_url, {params})
+        console.log('Webhook set successfully')
+      } catch(error){
+        console.log(err); console.log(err.response)
+      }
     });
   }
 
   restoreClient(clientId) {
-    let authStrategy = new LocalAuth({clientId})
-    let client = new Client({ authStrategy })
-
-    client.once('ready', ()=>{
-      console.log('Client restored succesfully')
-      console.log( client.status )
-      console.log( client.WAState )
-    })
-    client.once('authentication_failure', () => {
-      console.log('Authentication failed')
-    })
-    client.once('qr', ()=>{
-      console.log(clientId, ' qr received')
-      client.getState().then(res=>console.log(res))
-    })
-
+    let client = new Client({ authStrategy: new LocalAuth({clientId}) })
+    client.once('ready', () => console.log('Client ' + clientId + ' restored succesfully'))
     client.initialize()
     this.clients[clientId] = client;
     return client;
@@ -116,7 +87,7 @@ class ClientManager {
     if (!exists && !this.clients.hasOwnProperty(instance_id)) return null;
 
     if (this.clients.hasOwnProperty(instance_id)) {
-      return this.clients[instance_id];
+      return this.clients[instance_id].instance;
     }
 
     return this.restoreClient(instance_id);
