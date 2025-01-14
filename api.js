@@ -1,117 +1,117 @@
 const express = require('express');
 const router  = express.Router();
-const axios   = require('axios')
+const { query, validationResult } = require('express-validator');
+
+const validations = {
+  setWebHook: [
+    query(['instance_id', 'webhook_url']).notEmpty()
+  ],
+  getQrCode: [
+    query('instance_id').notEmpty()
+  ],
+  pairingCode: [
+    query('phone').notEmpty()
+  ],
+  send: [
+    query(['instance_id', 'number', 'message']).notEmpty(),
+    query('number').custom((value, {req})=>{
+      if ((value != 'null') && value != '57') { return true }
+      throw new Error(`Invalid phone number ${value}`);
+    })
+  ],
+  validate: [
+    query(['instance_id', 'phone']).notEmpty()
+  ]
+}
 
 const { MessageMedia } = require('whatsapp-web.js')
-const ClientManager = require('./service')
-const clientManager = new ClientManager()
 
-router.get('/create_instance', async (req, res) => {
-  if (clientManager.availableClient.id && !clientManager.availableClient.authenticated) {
-    res.send({ instance_id: clientManager.availableClient.id })
-    return
-  }
+module.exports = (app, io)=>{
+  const ClientManager = require('./service')
+  const clientManager = new ClientManager(io)
 
-  clientManager.createClient();
-
-  res.send({ instance_id: clientManager.availableClient.id })
-})
-
-router.get('/set_webhook', async (req, res) => {
-  if (clientManager.availableClient.id && !clientManager.availableClient.authenticated) {
-    if (!req.query.instance_id) { res.status(422).send({ message: 'instance_id is required' }); return }
-    if (!req.query.webhook_url) { res.status(422).send({ message: 'Webhook url is required' }); return }
-    if (req.query.instance_id != clientManager.availableClient.id) { res.status(422).send({ message: 'Instance ID invalidated' }); return }
-
-    if( clientManager.availableClient.webhook_url == req.query.webhook_url ){
-      res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
-      return
+  router.get('/pairing_code', validations.pairingCode, (req, res) => {
+    let errors = validationResult(req)
+    if( !errors.isEmpty() ){
+      return res.status(422).send({ errors: errors.array() });
     }
 
+    let newClient = clientManager.getPairingCode(req.query.phone)
+    return res.send({ name: 'yiye', instance_id: newClient.clientId, pairingCode: newClient.pairingCode.code })
+  })
+
+  router.get('/create_instance', async (req, res) => {
+    let newClient = clientManager.getAvailableInstance()
+    res.send({ instance_id: newClient.clientId })
+  })
+  
+  router.get('/set_webhook', validations.setWebHook, (req, res) => {
+    //No available client
+    if (!clientManager.availableClient.clientId || clientManager.availableClient.authenticated){
+      return res.status(422).send({ message: 'Instance ID invalidated' });
+    }
+
+    //No available client
+    if (req.query.instance_id != clientManager.availableClient.clientId) {
+      return res.status(422).send({ message: 'Instance ID invalidated' });
+    }
+  
     clientManager.availableClient.webhook_url = req.query.webhook_url
+    return res.send({ message: 'Webhook set successfully', status: 'success' })
+  })
+  
+  router.get('/get_qrcode', validations.getQrCode, (req, res) => {
+    if (clientManager.availableClient.authenticated || clientManager.availableClient.id != req.query.instance_id) {
+      res.send('instance ID invalidated')
+      return;
+    }
+  
+    res.send({ base64: clientManager.availableClient.qr.url, status: 'success' })
+  })
+  
+  router.get('/send', validations.send, async (req, res) => {
+    let client  = await clientManager.findClient(req.query.instance_id)
+    if (!client) { res.status(404).send({ status: 'error', message: 'Instance id not found or invalidated' }); return; }
+  
+    let media   = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url, {"unsafeMime": true}) : null
+    let options = media ? { media, caption: req.query.message } : {}
+    let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
+  
+    if (client.info) {
+      console.log(req.query.instance_id + ' Sending message ready ' + number)
+      client.sendMessage(number, req.query.message, options)
+    }
+    else {
+      console.log(req.query.instance_id + ' Sending message deferred ' + number)
+      client.once('ready', () => client.sendMessage(number, req.query.message, options))
+    }
+  
+    return res.send({ message: 'Message sent successfully' })
+  })
 
-    res.send({ 'message': 'Webhook set successfully', 'status': 'success' })
-    return
-  }
-  res.send('Instance ID invalidated')
-})
+  router.get('/validate', validations.validate, async(req, res) => {
+    let isOnline = await clientManager.isClientOnline(req.query.instance_id, req.query.phone)
+    res.send({message: isOnline ? 'Client is active and running' : 'Client is not responding', data: isOnline ? 1 : 0})
+  })
 
-router.get('/get_qrcode', (req, res) => {
-  if (!req.query.instance_id) {
-    res.status(422).send('instance_id field is required')
-    return;
-  }
+  router.get('/find', async (req, res) => {
+    let client = await clientManager.findClient(req.query.instance_id);
+  
+    if (!client) {
+      return res.send({message: 'Session does not exist.'})
+    }
+  
+    if (client.info) {
+      return res.send({status: 'success', message: 'Client found in memory', info: client.info, state: client.status})
+    }
+  
+    return res.send({status: 'success', message: 'Client found in DB', info: 'Not available until ready'})
+  })
 
-  if (clientManager.availableClient.authenticated || clientManager.availableClient.id != req.query.instance_id) {
-    res.send('instance ID invalidated')
-    return;
-  }
+  router.get('/logout', async (req, res) => {
+    let message = await clientManager.logout(req.query.instance_id)
+    res.send({ status: 'success', message })
+  })
 
-  res.send({ base64: clientManager.availableClient.qr, status: 'success' })
-})
-
-router.get('/find', async (req, res) => {
-  let client = await clientManager.findClient(req.query.instance_id);
-
-  if (!client) {
-    res.send({message: 'Session does not exist.'})
-    return
-  }
-
-  if (client.info) {
-    res.send({status: 'success', message: 'Client found in memory', info: client.info, state: client.status})
-    return
-  }
-
-  res.send({status: 'success', message: 'Client found in DB', info: 'Not available until ready'})
-  return
-})
-
-router.get('/send', async (req, res) => {
-  if (!req.query.instance_id) {
-    res.status(422).send({ message: 'instance_id field is required' });
-    return
-  }
-
-  if (!req.query.number) {
-    res.status(422).send({ message: 'number field is required' });
-    return
-  }
-
-  if (!req.query.message) {
-    res.status(422).send({ message: 'message field is required' });
-    return
-  }
-
-  if(req.query.number == 'null' || req.query.number == '57'){
-    res.status(422).send({message: 'invalid phone number ' + req.query.number})
-    return;
-  }
-
-  let client  = await clientManager.findClient(req.query.instance_id)
-  if (!client) { res.status(404).send({ status: 'error', message: 'Instance id not found or invalidated' }); return; }
-
-  let media   = req.query.media_url ? await MessageMedia.fromUrl(req.query.media_url, {"unsafeMime": true}) : null
-  let options = media ? { media, caption: req.query.message } : {}
-  let number  = req.query.group_id ? `${req.query.group_id}@g.us`: `${req.query.number}@c.us`
-
-  if (client.info) {
-    console.log(req.query.instance_id + ' Sending message ready ' + number)
-    client.sendMessage(number, req.query.message, options)
-  }
-  else {
-    console.log(req.query.instance_id + ' Sending message deferred ' + number)
-    client.once('ready', () => client.sendMessage(number, req.query.message, options))
-  }
-
-  res.send({ message: 'Message sent successfully' })
-  return
-
-})
-
-router.get('/logout', async (req, res) => {
-  let message = await clientManager.logout(req.query.instance_id)
-  res.send({ status: 'success', message })
-})
-
-module.exports = router;
+  app.use('/', router)
+};

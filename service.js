@@ -1,96 +1,93 @@
-const mongoose               = require('mongoose')
-const { MongoStore }         = require('wwebjs-mongo')
-const store                  = new MongoStore(mongoose)
 const { Client, LocalAuth }  = require('whatsapp-web.js')
-const qrcode                 = require('qrcode')
-const { v4: uuidv4 }         = require('uuid')
-const fs = require("fs")
+const Cliente                = require('./Cliente')
+const fs                     = require("fs")
 
 class ClientManager {
-  constructor() {
-    this.clients = {};
-    this.availableClient = {}
-    mongoose.connect('mongodb://localhost/wweb')
+  constructor(io) {
+    this.io              = io;
+    this.clients         = {};
+    this.pairingClients  = {};
+    this.availableClient = this.createInstance()
   }
 
-  createClient() {
-    let clientId     = uuidv4().split('-').pop()
-    let authStrategy = new LocalAuth({clientId})
-    let client = new Client({authStrategy});
+  createInstance(clientId, phone) {
+    let newClient = new Cliente(clientId, phone)
+    newClient.setDefaultListeners()
+    newClient.initialize()
+    this.setClientDefaultListeners(newClient)
+    return newClient
+  }
 
-    this.availableClient.authenticated = false
-    this.availableClient.client        = client
-    this.availableClient.id            = clientId
+  getPairingCode(phone){
+    if(this.pairingClients.hasOwnProperty(phone)){
+      return this.pairingClients[phone]
+    }
 
-    console.log('Client created ' + this.availableClient.id);
+    let newClient = this.createInstance(null, phone)
+    this.pairingClients[phone] = newClient;
+    return newClient
+  }
 
-    this.setClientDefaultListeners(client);
-
-    client.initialize();
-    console.log('Initializing client');
-    return client;
+  getAvailableInstance(){
+    if( !this.availableClient.authenticated && !this.availableClient.isExpired() ){
+      return this.availableClient
+    }
+    this.availableClient = this.createInstance()
+    return this.availableClient
   }
 
   setClientDefaultListeners(client) {
-    console.log('Setting client default listeners');
 
-    client.on('qr', (qrcontent) => {
-      qrcode.toDataURL(qrcontent, (err, url) => {
-        console.log(this.availableClient.id + ' qr updated')
-        this.availableClient.qr = url;
-      });
+    client.on('qr', async (qrurl) => {
+      if(client.clientId != this.availableClient.clientId){return;}
+      this.io.emit('qrcode', JSON.stringify({
+        qrcode: qrurl,
+        instance_id: client.clientId
+      }))
     });
 
-    client.on('ready', () => {
-      console.log('Client ready!');
-      this.clients[client.options.authStrategy.clientId] = client;
-      console.log('Client info');
-      console.log(client.info);
+    client.on('pairingCode', async (pairingCode) => {
+      this.io.emit('pairingCode', JSON.stringify({
+        pairingCode,
+        instance_id: client.clientId
+      }))
+    });
 
-      if (this.availableClient.id != client.options.authStrategy.clientId) { return; }
-      this.availableClient.authenticated = true;
+    client.on('ready', async () => {
+      let params = {
+        event: 'ready',
+        instance_id: client.clientId,
+        phone: client.instance.info.wid.user,
+      }
 
-	if( this.availableClient.webhook_url ){
-		axios.get(this.availableClient.webhook_url, {
-		  params: {
-		    event: 'ready',
-		    instance_id: this.availableClient.id,
-		    phone: this.availableClient.client.info.wid.user
-		  }
-		})
-		.then(res => console.log('Webhook set successfully'))
-		.catch(err => { console.log(err); console.log(err.response) })
-	}
+      this.clients[client.clientId] = client;
+      this.io.emit('ready', JSON.stringify(params))
+
+      // SetWebHook if specified
+      try {
+        if( !client.webhook_url ){ return; }
+        await axios.get(client.webhook_url, {params})
+        console.log('Webhook set successfully')
+      } catch(error){
+        console.log(err); console.log(err.response)
+      }
     });
   }
 
   restoreClient(clientId) {
-    let authStrategy = new LocalAuth({clientId})
-    let client = new Client({ authStrategy })
-    client.on('ready', ()=>{
-        console.log('Client restored succesfully')
-    })
-    client.on('authentication_failure', () => {
-        console.log('Authentication failed')
-    })
-    client.on('qr', ()=>{
-        console.log(clientId, ' qr received')
-        client.getState().then(res=>console.log(res))
-    })
-    console.log( client.status )
-    console.log( client.WAState )
+    let client = new Client({ authStrategy: new LocalAuth({clientId}) })
+    client.once('ready', () => console.log('Client ' + clientId + ' restored succesfully'))
     client.initialize()
     this.clients[clientId] = client;
     return client;
   }
 
   async findClient(instance_id) {
-    // let exists = await store.sessionExists({ session: `RemoteAuth-${instance_id}` });
     let exists = fs.existsSync(`./.wwebjs_auth/session-${instance_id}`)
     if (!exists && !this.clients.hasOwnProperty(instance_id)) return null;
 
     if (this.clients.hasOwnProperty(instance_id)) {
-      return this.clients[instance_id];
+      return this.clients[instance_id].instance;
     }
 
     return this.restoreClient(instance_id);
@@ -98,14 +95,13 @@ class ClientManager {
 
   async deleteClient(client, instance_id){
     await client.logout()
-    await store.delete({ session: instance_id });
     delete this.clients[instance_id];
     console.log(instance_id + 'Session closed ')
   }
 
   async logout(instance_id){
     let client = await this.findClient(instance_id)
-    console.log( instance_id + ' requested logout' );
+
     if( !client ){ return 'session already closed.'; }
 
     if( client.info ){
@@ -115,6 +111,21 @@ class ClientManager {
 
     client.once('ready', async () => this.deleteClient(client, instance_id))
     return 'session will close soon.'
+  }
+
+  async isClientOnline(instance_id, wid) {
+    let client = await this.findClient(instance_id);
+
+    if(!client || !client.info){ return false; }
+
+    try {
+      const contact  = await client.getContactById(`${wid}@c.us`);
+      const isOnline = (contact.isMe && contact.isUser)
+      return isOnline;
+    } catch (error) {
+      console.error("Error:", error);
+      return false;
+    }
   }
 }
 
