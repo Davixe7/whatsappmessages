@@ -10,7 +10,7 @@ class Cliente extends EventEmitter {
         this.authenticated = false
         this.clientId      = clientId ? clientId : uuidv4().split('-').pop()
         this.phone         = phone
-        this.instance      = new Client({authStrategy: new LocalAuth({clientId: this.clientId}),puppeteer: {headless: false}})
+        this.instance      = new Client({authStrategy: new LocalAuth({clientId: this.clientId}),puppeteer: {headless: true, args: ['--no-sandbox', '--headless', '--disable-setuid-sandbox']}})
 
         this.webhook_url   = null
         this.pairingCode   = {updatedAt: new Date(), code: null}

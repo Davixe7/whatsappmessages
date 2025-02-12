@@ -61,10 +61,14 @@ module.exports = (app, io)=>{
   })
   
   router.get('/get_qrcode', validations.getQrCode, (req, res) => {
-    if (clientManager.availableClient.authenticated || clientManager.availableClient.id != req.query.instance_id) {
+    if (clientManager.availableClient.authenticated ) {
       res.send('instance ID invalidated')
       return;
     }
+if( clientManager.availableClient.clientId != req.query.instance_id ){
+res.send('Instance ID Does not match');
+return;
+}
   
     res.send({ base64: clientManager.availableClient.qr.url, status: 'success' })
   })
