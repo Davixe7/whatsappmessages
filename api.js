@@ -112,6 +112,21 @@ return;
     return res.send({status: 'success', message: 'Client found in DB', info: 'Not available until ready'})
   })
 
+router.get('/instances', (req, res)=>{
+if( Object.keys(clientManager.clients).length > 0 ){
+	let instances = [];
+	instances = Object.values(clientManager.clients).map(i => {
+		console.log('client_id: ' + i.clientId)
+		return {
+			authenticated: i.authenticated,
+			clientId: i.clientId,
+			phone: i.phone
+		}
+	})
+	res.send({instances});
+}
+});
+
   router.get('/logout', async (req, res) => {
     let message = await clientManager.logout(req.query.instance_id)
     res.send({ status: 'success', message })
