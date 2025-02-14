@@ -75,7 +75,7 @@ class ClientManager {
   }
 
   restoreClient(clientId) {
-    let client = new Client({ authStrategy: new LocalAuth({clientId}) })
+    let client = new Cliente(clientId)
     client.once('ready', () => console.log('Client ' + clientId + ' restored succesfully'))
     client.initialize()
     this.clients[clientId] = client;
