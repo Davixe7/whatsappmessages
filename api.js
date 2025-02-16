@@ -125,6 +125,7 @@ if( Object.keys(clientManager.clients).length > 0 ){
 	})
 	res.send({instances});
 }
+res.send([]);
 });
 
   router.get('/logout', async (req, res) => {
