@@ -69,7 +69,7 @@ class ClientManager {
         await axios.get(client.webhook_url, {params})
         console.log('Webhook set successfully')
       } catch(error){
-        console.log(err); console.log(err.response)
+        console.log(error); console.log(error.response)
       }
     });
   }
