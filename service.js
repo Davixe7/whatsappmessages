@@ -1,6 +1,7 @@
 const { Client, LocalAuth }  = require('whatsapp-web.js')
 const Cliente                = require('./Cliente')
 const fs                     = require("fs")
+const axios                  = require("axios")
 
 class ClientManager {
   constructor(io) {

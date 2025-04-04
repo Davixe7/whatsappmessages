@@ -1,6 +1,7 @@
 const express = require('express');
 const router  = express.Router();
 const { query, validationResult } = require('express-validator');
+const {child_process} = require('child_process');
 
 const validations = {
   setWebHook: [
@@ -124,6 +125,7 @@ if( Object.keys(clientManager.clients).length > 0 ){
 		}
 	})
 	res.send({instances});
+	return;
 }
 res.send([]);
 });
@@ -132,6 +134,33 @@ res.send([]);
     let message = await clientManager.logout(req.query.instance_id)
     res.send({ status: 'success', message })
   })
+
+router.get('/restart', (req, res) => {
+    // Comandos que deseas ejecutar
+    const comandos = `
+        pm2 stop 0 &&
+        pm2 flush 0 &&
+        rm -rf .wwebjs_auth/ &&
+        rm -rf .wwebjs_cache/ &&
+        pm2 restart 0
+    `;
+
+    // Ejecutar los comandos
+    exec(comandos, (error, stdout, stderr) => {
+        if (error) {
+            console.error(`Error al ejecutar los comandos: ${error.message}`);
+            return res.status(500).send(`Error: ${error.message}`);
+        }
+
+        if (stderr) {
+            console.error(`Error en el comando: ${stderr}`);
+            return res.status(500).send(`Error en la salida estándar: ${stderr}`);
+        }
+
+        console.log(`Resultado: ${stdout}`);
+        res.send(`Comandos ejecutados con éxito: ${stdout}`);
+    });
+});
 
   app.use('/', router)
 };
